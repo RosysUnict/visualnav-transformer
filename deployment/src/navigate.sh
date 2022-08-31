@@ -40,7 +40,7 @@ tmux send-keys "python pd_controller.py"
 tmux select-pane -t 4
 tmux send-keys "conda activate vint_deployment_11" Enter
 tmux send-keys "cd ~/vint_ws/src/visualnav-transformer/deployment/src" Enter
-tmux send-keys "python visualize_plot_traj.py" Enter
+tmux send-keys "python visualize_path.py" Enter
 
 
 # Attach to the tmux session
