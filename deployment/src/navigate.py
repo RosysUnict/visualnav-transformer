@@ -130,7 +130,7 @@ def main(args: argparse.Namespace):
     while not rospy.is_shutdown():
         # EXPLORATION MODE
         chosen_waypoint = np.zeros(4)
-        if len(context_queue) > model_params["context_size"]:
+        if len(context_queue) > model_params["context_size"]: #this means the buffer is ready
             if model_params["model_type"] == "nomad":
                 obs_images = transform_images(context_queue, model_params["image_size"], center_crop=False)
                 obs_images = torch.split(obs_images, 3, dim=1)
@@ -192,9 +192,12 @@ def main(args: argparse.Namespace):
                 sampled_actions_pub.publish(sampled_actions_msg)
                 naction = naction[0] 
                 chosen_waypoint = naction[args.waypoint]
-            elif (len(context_queue) > model_params["context_size"]):
-                start = max(closest_node - args.radius, 0)
-                end = min(closest_node + args.radius + 1, goal_node)
+            elif (len(context_queue) > model_params["context_size"]): #this check seems to be redundant
+                start = max(closest_node_idx - args.radius, 0)
+                end = min(closest_node_idx + args.radius + 1, goal_node)
+                rospy.loginfo(start)
+                rospy.loginfo(end)
+
                 distances = []
                 waypoints = []
                 batch_obs_imgs = []
@@ -214,6 +217,7 @@ def main(args: argparse.Namespace):
                 waypoints = to_numpy(waypoints)
                 # look for closest node
                 closest_node = np.argmin(distances)
+                closest_node_idx = max(closest_node_idx + closest_node - args.radius,0)
                 # chose subgoal and output waypoints
                 if distances[closest_node] > args.close_threshold:
                     chosen_waypoint = waypoints[closest_node][args.waypoint]
@@ -221,7 +225,7 @@ def main(args: argparse.Namespace):
                 else:
                     chosen_waypoint = waypoints[min(
                         closest_node + 1, len(waypoints) - 1)][args.waypoint]
-                    sg_img = topomap[start + min(closest_node + 1, len(waypoints) - 1)]     
+                    sg_img = topomap[start + min(closest_node + 1, len(waypoints) - 1)]
         # RECOVERY MODE
         if model_params["normalize"]:
             chosen_waypoint[:2] *= (MAX_V / RATE)  
