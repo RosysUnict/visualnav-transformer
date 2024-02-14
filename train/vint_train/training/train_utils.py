@@ -109,6 +109,7 @@ def _log_data(
     dist_pred,
     dist_label,
     goal_pos,
+    goal_yaw,
     dataset_index,
     use_wandb,
     mode,
@@ -152,6 +153,7 @@ def _log_data(
             to_numpy(goal_image),
             to_numpy(dataset_index),
             to_numpy(goal_pos),
+            to_numpy(goal_yaw),
             to_numpy(action_pred),
             to_numpy(action_label),
             mode,
@@ -242,6 +244,7 @@ def train(
             action_label,
             dist_label,
             goal_pos,
+            goal_yaw,
             dataset_index,
             action_mask,
         ) = data
@@ -251,9 +254,17 @@ def train(
         obs_images = [transform(obs_image).to(device) for obs_image in obs_images]
         obs_image = torch.cat(obs_images, dim=1)
 
-        viz_goal_image = TF.resize(goal_image, VISUALIZATION_IMAGE_SIZE)
+        # viz_goal_image = TF.resize(goal_image, VISUALIZATION_IMAGE_SIZE)
         
-        goal_image = transform(goal_image).to(device)
+        # goal_image = transform(goal_image).to(device)
+        goal_yaw = goal_yaw[i].view(-1, 1)
+        # print(goal_yaw[i])
+        # print(goal_pos[i])
+        # goal_yaw = goal_yaw.view(-1, 1)
+        goal_image = torch.cat((goal_pos[i,:], goal_yaw[i]), dim=0).to(device)
+        # print(goal_image.shape)
+
+        # print(goal_pos[1])
         model_outputs = model(obs_image, goal_image)
 
         dist_label = dist_label.to(device)
@@ -297,6 +308,7 @@ def train(
             dist_pred=dist_pred,
             dist_label=dist_label,
             goal_pos=goal_pos,
+            goal_yaw=goal_yaw,
             dataset_index=dataset_index,
             wandb_log_freq=wandb_log_freq,
             print_log_freq=print_log_freq,
@@ -381,6 +393,7 @@ def evaluate(
                 action_label,
                 dist_label,
                 goal_pos,
+                goal_yaw,
                 dataset_index,
                 action_mask,
             ) = data
@@ -390,9 +403,10 @@ def evaluate(
             obs_images = [transform(obs_image).to(device) for obs_image in obs_images]
             obs_image = torch.cat(obs_images, dim=1)
 
-            viz_goal_image = TF.resize(goal_image, VISUALIZATION_IMAGE_SIZE)
+            # viz_goal_image = TF.resize(goal_image, VISUALIZATION_IMAGE_SIZE)
 
-            goal_image = transform(goal_image).to(device)
+            # goal_image = transform(goal_image).to(device)
+            goal_image = torch.tensor([goal_pos[0], goal_pos[1], goal_yaw]).to(device)
             model_outputs = model(obs_image, goal_image)
 
             dist_label = dist_label.to(device)
@@ -430,6 +444,7 @@ def evaluate(
         action_pred=action_pred,
         action_label=action_label,
         goal_pos=goal_pos,
+        goal_yaw=goal_yaw,
         dist_pred=dist_pred,
         dist_label=dist_label,
         dataset_index=dataset_index,

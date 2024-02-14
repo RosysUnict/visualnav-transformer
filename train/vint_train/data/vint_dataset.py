@@ -242,8 +242,10 @@ class ViNT_Dataset(Dataset):
         yaw = traj_data["yaw"][start_index:end_index:self.waypoint_spacing]
         positions = traj_data["position"][start_index:end_index:self.waypoint_spacing]
         goal_pos = traj_data["position"][min(goal_time, len(traj_data["position"]) - 1)]
+        goal_yaw = traj_data["yaw"][min(goal_time, len(traj_data["position"]) - 1)]
 
         if len(yaw.shape) == 2:
+            #squeeze the yaw if it has an extra dimension
             yaw = yaw.squeeze(1)
 
         if yaw.shape != (self.len_traj_pred + 1,):
@@ -256,6 +258,8 @@ class ViNT_Dataset(Dataset):
 
         waypoints = to_local_coords(positions, positions[0], yaw[0])
         goal_pos = to_local_coords(goal_pos, positions[0], yaw[0])
+        # print(goal_pos)
+        goal_yaw = yaw[0]-goal_yaw
 
         assert waypoints.shape == (self.len_traj_pred + 1, 2), f"{waypoints.shape} and {(self.len_traj_pred + 1, 2)} should be equal"
 
@@ -271,7 +275,7 @@ class ViNT_Dataset(Dataset):
 
         assert actions.shape == (self.len_traj_pred, self.num_action_params), f"{actions.shape} and {(self.len_traj_pred, self.num_action_params)} should be equal"
 
-        return actions, goal_pos
+        return actions, goal_pos, goal_yaw
     
     def _get_trajectory(self, trajectory_name):
         if trajectory_name in self.trajectory_cache:
@@ -332,7 +336,7 @@ class ViNT_Dataset(Dataset):
         assert goal_time < goal_traj_len, f"{goal_time} an {goal_traj_len}"
 
         # Compute actions
-        actions, goal_pos = self._compute_actions(curr_traj_data, curr_time, goal_time)
+        actions, goal_pos, goal_yaw = self._compute_actions(curr_traj_data, curr_time, goal_time)
         
         # Compute distances
         if goal_is_negative:
@@ -357,6 +361,7 @@ class ViNT_Dataset(Dataset):
             actions_torch,
             torch.as_tensor(distance, dtype=torch.int64),
             torch.as_tensor(goal_pos, dtype=torch.float32),
+            torch.as_tensor(goal_yaw, dtype=torch.float32),
             torch.as_tensor(self.dataset_index, dtype=torch.int64),
             torch.as_tensor(action_mask, dtype=torch.float32),
         )
