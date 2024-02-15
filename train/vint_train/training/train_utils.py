@@ -153,7 +153,7 @@ def _log_data(
             to_numpy(goal_image),
             to_numpy(dataset_index),
             to_numpy(goal_pos),
-            to_numpy(goal_yaw),
+            # to_numpy(goal_yaw),
             to_numpy(action_pred),
             to_numpy(action_label),
             mode,
@@ -256,12 +256,8 @@ def train(
 
         # viz_goal_image = TF.resize(goal_image, VISUALIZATION_IMAGE_SIZE)
         
-        # goal_image = transform(goal_image).to(device)
-        goal_yaw = goal_yaw[i].view(-1, 1)
-        # print(goal_yaw[i])
-        # print(goal_pos[i])
-        # goal_yaw = goal_yaw.view(-1, 1)
-        goal_image = torch.cat((goal_pos[i,:], goal_yaw[i]), dim=0).to(device)
+        goal_yaw = goal_yaw.view(-1, 1)
+        goal_image = torch.cat((goal_pos, goal_yaw), dim=1).to(device)
         # print(goal_image.shape)
 
         # print(goal_pos[1])
@@ -302,7 +298,7 @@ def train(
             num_images_log=num_images_log,
             loggers=loggers,
             obs_image=viz_obs_image,
-            goal_image=viz_goal_image,
+            goal_image=viz_obs_image,
             action_pred=action_pred,
             action_label=action_label,
             dist_pred=dist_pred,
@@ -406,7 +402,10 @@ def evaluate(
             # viz_goal_image = TF.resize(goal_image, VISUALIZATION_IMAGE_SIZE)
 
             # goal_image = transform(goal_image).to(device)
-            goal_image = torch.tensor([goal_pos[0], goal_pos[1], goal_yaw]).to(device)
+            # goal_image = torch.tensor([goal_pos[0], goal_pos[1], goal_yaw]).to(device)
+            goal_yaw = goal_yaw.view(-1, 1)
+            goal_image = torch.cat((goal_pos, goal_yaw), dim=1).to(device)
+
             model_outputs = model(obs_image, goal_image)
 
             dist_label = dist_label.to(device)
@@ -440,7 +439,7 @@ def evaluate(
         num_images_log=num_images_log,
         loggers=loggers,
         obs_image=viz_obs_image,
-        goal_image=viz_goal_image,
+        goal_image=viz_obs_image,
         action_pred=action_pred,
         action_label=action_label,
         goal_pos=goal_pos,

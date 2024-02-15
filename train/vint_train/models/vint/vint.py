@@ -11,18 +11,27 @@ class MLP(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(MLP, self).__init__()
 
-        # Primo strato completamente connesso
-        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.z_parameters = Parameter(torch.zeros(3000))
+
         # Funzione di attivazione ReLU
         self.relu = nn.ReLU()
-        # Secondo strato completamente connesso
-        self.fc2 = nn.Linear(hidden_size, output_size)
 
-    def forward(self, x ):
+        # Fully Connected Layer 1: 3003 (input data) -> 256 (hidden node)
+        self.fc1 = nn.Linear(input_size, 1024)
+        self.fc2 = nn.Linear(1024, 1024)
+        self.fc3 = nn.Linear(1024, 512)
+
+
+    def forward(self, x):
+        # Concatenate z_parameters to the input
+        x = torch.cat([x, self.z_parameters.repeat(x.size(0), 1)], dim=1)
         # Passaggio in avanti attraverso il primo strato completamente connesso e la funzione di attivazione ReLU
         x = self.relu(self.fc1(x))
         # Passaggio in avanti attraverso il secondo strato completamente connesso
         x = self.fc2(x)
+        x = self.relu(x)
+        x = self.fc3(x)
+
         return x
 
 class ViNT(BaseModel):
@@ -69,7 +78,6 @@ class ViNT(BaseModel):
             self.num_obs_features = self.obs_encoder._fc.in_features
             goal_dimension = 3
             self.goal_encoder = MLP(3000+goal_dimension, 1000, 512)
-            self.z_parameters = Parameter(torch.zeros(3000)).to('cuda:0')
             self.num_goal_features = 512
         else:
             raise NotImplementedError
@@ -123,9 +131,12 @@ class ViNT(BaseModel):
             
         # elif self.obs_encoder_name.split("-")[0] == "positionnet":
             # understand how the goal is encoded
-            goal_input_encoding = torch.cat((self.z_parameters, goal), dim=0)
-            goal_encoding = self.goal_encoder(goal_input_encoding)
-            assert goal_encoding.shape[0] == self.goal_encoding_size
+            # print(goal.shape)
+            # print(self.z_parameters.shape)
+            # goal_input_encoding = torch.cat((self.z_parameters, goal), dim=0)
+            goal_encoding = self.goal_encoder(goal)
+
+            assert goal_encoding.shape[1] == self.goal_encoding_size
 
         # split the observation into context based on the context size
         # image size is [batch_size, 3*self.context_size, H, W]
@@ -151,6 +162,7 @@ class ViNT(BaseModel):
         obs_encoding = torch.transpose(obs_encoding, 0, 1)
         # currently, the size is [batch_size, self.context_size+1, self.obs_encoding_size]
 
+        goal_encoding.unsqueeze_(1)
         # concatenate the goal encoding to the observation encoding
         tokens = torch.cat((obs_encoding, goal_encoding), dim=1)
         final_repr = self.decoder(tokens)

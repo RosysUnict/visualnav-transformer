@@ -234,11 +234,11 @@ def main(config):
     lr = float(config["lr"])
     config["optimizer"] = config["optimizer"].lower()
     if config["optimizer"] == "adam":
-        optimizer = Adam(model.parameters(), lr=lr, betas=(0.9, 0.98))
+        optimizer = Adam(model.goal_encoder.parameters(), lr=lr, betas=(0.9, 0.98))
     elif config["optimizer"] == "adamw":
-        optimizer = AdamW(model.parameters(), lr=lr)
+        optimizer = AdamW(model.goal_encoder.parameters(), lr=lr)
     elif config["optimizer"] == "sgd":
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+        optimizer = torch.optim.SGD(model.goal_encoder.parameters(), lr=lr, momentum=0.9)
     else:
         raise ValueError(f"Optimizer {config['optimizer']} not supported")
 
@@ -281,7 +281,7 @@ def main(config):
 
     current_epoch = 0
     if "load_run" in config:
-        load_project_folder = os.path.join("logs", config["load_run"])
+        load_project_folder = os.path.join("train/logs", config["load_run"])
         print("Loading model from ", load_project_folder)
         latest_path = os.path.join(load_project_folder, "latest.pth")
         latest_checkpoint = torch.load(latest_path) #f"cuda:{}" if torch.cuda.is_available() else "cpu")
@@ -294,11 +294,11 @@ def main(config):
         model = nn.DataParallel(model, device_ids=config["gpu_ids"])
     model = model.to(device)
 
-    if "load_run" in config:  # load optimizer and scheduler after data parallel
-        if "optimizer" in latest_checkpoint:
-            optimizer.load_state_dict(latest_checkpoint["optimizer"].state_dict())
-        if scheduler is not None and "scheduler" in latest_checkpoint:
-            scheduler.load_state_dict(latest_checkpoint["scheduler"].state_dict())
+    # if "load_run" in config:  # load optimizer and scheduler after data parallel
+    #     if "optimizer" in latest_checkpoint:
+    #         optimizer.load_state_dict(latest_checkpoint["optimizer"].state_dict())
+    #     if scheduler is not None and "scheduler" in latest_checkpoint:
+    #         scheduler.load_state_dict(latest_checkpoint["scheduler"].state_dict())
 
     if config["model_type"] == "vint" or config["model_type"] == "gnm": 
         train_eval_loop(
@@ -365,7 +365,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    with open("config/defaults.yaml", "r") as f:
+    with open("train/config/defaults.yaml", "r") as f:
         default_config = yaml.safe_load(f)
 
     config = default_config
@@ -390,7 +390,7 @@ if __name__ == "__main__":
         wandb.init(
             project=config["project_name"],
             settings=wandb.Settings(start_method="fork"),
-            entity="gnmv2", # TODO: change this to your wandb entity
+            entity="rosys-unict", # TODO: change this to your wandb entity
         )
         wandb.save(args.config, policy="now")  # save the config file
         wandb.run.name = config["run_name"]
