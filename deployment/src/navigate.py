@@ -252,7 +252,9 @@ def main(args: argparse.Namespace):
                 # predict distances and waypoints
                 # EVAL TO CHANGE batch_goal_data = torch.cat(batch_goal_data, dim=0).to(device)
                 rospy.loginfo("Angle: %s" %str(tf.transformations.euler_from_quaternion(rot)))
-                batch_goal_data = torch.tensor([trans[0], trans[1], tf.transformations.euler_from_quaternion(rot)[2]]).to(device)
+                # batch_goal_data = torch.tensor([trans[0], trans[1], tf.transformations.euler_from_quaternion(rot)[2]]).to(device)
+                
+                batch_goal_data = torch.tensor([trans[0], trans[1]]).to(device)
                 batch_goal_data = batch_goal_data.unsqueeze(0)
 
                 distances, waypoints = model(batch_obs_imgs, batch_goal_data)
