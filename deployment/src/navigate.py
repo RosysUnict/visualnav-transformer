@@ -23,6 +23,10 @@ import argparse
 import yaml
 import time
 
+from vint_train.visualizing.action_utils import plot_trajs_and_points_on_image, plot_trajs_and_points 
+from cv_bridge import CvBridge
+import io
+
 # UTILS
 from topic_names import (IMAGE_TOPIC,
                         WAYPOINT_TOPIC,
@@ -58,6 +62,58 @@ def callback_obs(msg):
         else:
             context_queue.pop(0)
             context_queue.append(obs_img)
+
+
+def plot_and_publish_actions_image(pred_waypoints, goal_pos, obs_img, dataset_name, display=False):
+    bridge = CvBridge()
+    fig, ax = plt.subplots(1, 3)
+    start_pos = np.array([0, 0])
+    if len(pred_waypoints.shape) > 2:
+        trajs = [*pred_waypoints]
+    else:
+        trajs = [pred_waypoints]
+    plot_trajs_and_points(
+        ax[0],
+        trajs,
+        [start_pos, goal_pos],
+        traj_colors=[CYAN, MAGENTA],
+        point_colors=[GREEN, RED],
+    )
+    plot_trajs_and_points_on_image(
+        ax[1],
+        obs_img,
+        dataset_name,
+        trajs,
+        [start_pos, goal_pos],
+        traj_colors=[CYAN, MAGENTA],
+        point_colors=[GREEN, RED],
+    )
+    # ax[2].imshow(goal_img)
+
+    fig.set_size_inches(18.5, 10.5)
+    ax[0].set_title(f"Action Prediction")
+    ax[1].set_title(f"Observation")
+    ax[2].set_title(f"Goal")
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    image = np.asarray(bytearray(buf.read()), dtype=np.uint8)
+    buf.close()
+
+    # Reshape the image to the appropriate size
+    image = image.reshape((len(image), 1))
+
+    # Convert image to ROS message
+    ros_image = bridge.cv2_to_imgmsg(image, encoding="rgb8")
+
+    # Publish the image
+    # image_pub.publish(ros_image)
+
+    if not display:
+        plt.close(fig)
+
+    return ros_image
 
 
 def main(args: argparse.Namespace):
@@ -113,6 +169,8 @@ def main(args: argparse.Namespace):
         IMAGE_TOPIC, Image, callback_obs, queue_size=1)
     waypoint_pub = rospy.Publisher(
         WAYPOINT_TOPIC, Float32MultiArray, queue_size=1)  
+    action_image_pub = rospy.Publisher(
+        ACTION_IMAGE_TOPIC, Image, queue_size=1)
     sampled_actions_pub = rospy.Publisher(SAMPLED_ACTIONS_TOPIC, Float32MultiArray, queue_size=1)
     goal_pub = rospy.Publisher("/topoplan/reached_goal", Bool, queue_size=1)
 
