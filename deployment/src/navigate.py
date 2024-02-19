@@ -30,6 +30,7 @@ import geometry_msgs.msg
 
 
 from vint_train.visualizing.action_utils import plot_trajs_and_points_on_image, plot_trajs_and_points 
+from vint_train.visualizing.colors import CYAN, MAGENTA, GREEN, RED
 from cv_bridge import CvBridge
 import io
 
@@ -43,6 +44,8 @@ from topic_names import (IMAGE_TOPIC,
 # CONSTANTS
 #TOPOMAP_IMAGES_DIR = "../topomaps/images"
 IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_raw"
+ACTION_IMAGE_TOPIC = "/action_plot_image"
+
 
 MODEL_WEIGHTS_PATH = "../model_weights"
 ROBOT_CONFIG_PATH ="../config/robot.yaml"
@@ -270,6 +273,8 @@ def main(args: argparse.Namespace):
 
                 chosen_waypoint = waypoints[0][args.waypoint]
                 rospy.loginfo( "Chosen Waypoint: %s"  %str(chosen_waypoint))
+                ros_image = plot_and_publish_actions_image(waypoints[0], trans[0:1], transf_obs_img[0], "vint-position", display=False)
+                action_image_pub.publish(ros_image)
         
         # RECOVERY MODE
         if model_params["normalize"]:
@@ -285,7 +290,6 @@ def main(args: argparse.Namespace):
         #              rospy.Time.now(),
         #              "goal_frame",
         #              "robot_odom") #CHANGE TO MAP WHEN OUTDOOR
-        
         rate.sleep()
 
 
