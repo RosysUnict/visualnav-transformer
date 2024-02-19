@@ -23,9 +23,16 @@ import argparse
 import yaml
 import time
 
+
+import tf
+import geometry_msgs.msg
+
+
+
 from vint_train.visualizing.action_utils import plot_trajs_and_points_on_image, plot_trajs_and_points 
 from cv_bridge import CvBridge
 import io
+
 
 # UTILS
 from topic_names import (IMAGE_TOPIC,
@@ -34,7 +41,9 @@ from topic_names import (IMAGE_TOPIC,
 
 
 # CONSTANTS
-TOPOMAP_IMAGES_DIR = "../topomaps/images"
+#TOPOMAP_IMAGES_DIR = "../topomaps/images"
+IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_raw"
+
 MODEL_WEIGHTS_PATH = "../model_weights"
 ROBOT_CONFIG_PATH ="../config/robot.yaml"
 MODEL_CONFIG_PATH = "../config/models.yaml"
@@ -145,21 +154,21 @@ def main(args: argparse.Namespace):
 
     
      # load topomap
-    topomap_filenames = sorted(os.listdir(os.path.join(
-        TOPOMAP_IMAGES_DIR, args.dir)), key=lambda x: int(x.split(".")[0]))
-    topomap_dir = f"{TOPOMAP_IMAGES_DIR}/{args.dir}"
-    num_nodes = len(os.listdir(topomap_dir))
-    topomap = []
-    for i in range(num_nodes):
-        image_path = os.path.join(topomap_dir, topomap_filenames[i])
-        topomap.append(PILImage.open(image_path))
+    # topomap_filenames = sorted(os.listdir(os.path.join(
+    #     TOPOMAP_IMAGES_DIR, args.dir)), key=lambda x: int(x.split(".")[0]))
+    # topomap_dir = f"{TOPOMAP_IMAGES_DIR}/{args.dir}"
+    # num_nodes = len(os.listdir(topomap_dir))
+    # topomap = []
+    # for i in range(num_nodes):
+    #     image_path = os.path.join(topomap_dir, topomap_filenames[i])
+    #     topomap.append(PILImage.open(image_path))
 
-    closest_node = 0
-    assert -1 <= args.goal_node < len(topomap), "Invalid goal index"
-    if args.goal_node == -1:
-        goal_node = len(topomap) - 1
-    else:
-        goal_node = args.goal_node
+    #closest_node = 0
+    # assert -1 <= args.goal_node < len(topomap), "Invalid goal index"
+    # if args.goal_node == -1:
+    #     goal_node = len(topomap) - 1
+    # else:
+    #     goal_node = args.goal_node
     reached_goal = False
 
      # ROS
@@ -172,7 +181,12 @@ def main(args: argparse.Namespace):
     action_image_pub = rospy.Publisher(
         ACTION_IMAGE_TOPIC, Image, queue_size=1)
     sampled_actions_pub = rospy.Publisher(SAMPLED_ACTIONS_TOPIC, Float32MultiArray, queue_size=1)
-    goal_pub = rospy.Publisher("/topoplan/reached_goal", Bool, queue_size=1)
+    goal_pub = rospy.Publisher("/reached_goal", Bool, queue_size=1)
+    tf_listener = tf.TransformListener()
+    tf_broadcaster = tf.TransformBroadcaster()
+    
+
+
 
     print("Registered with master node. Waiting for image observations...")
 
@@ -184,112 +198,94 @@ def main(args: argparse.Namespace):
             clip_sample=True,
             prediction_type='epsilon'
         )
+
+    x = 1.5
+    y = 1.5
+    theta = 0
     # navigation loop
+    # while not (rospy.is_shutdown()):
+    # tf_broadcaster.sendTransform((x, y, 0),
+    #                  tf.transformations.quaternion_from_euler(0, 0, theta),
+    #                  rospy.Time.now(),
+    #                  "goal_frame",
+    #                  "/robot_odom") #CHANGE TO MAP WHEN OUTDOOR
+    #     #goal pose wrt static frame (x,y,theta)
+    # rospy.sleep(1)
+    tf_listener.waitForTransform("goal_frame", "robot_base_footprint", rospy.Time(0), rospy.Duration(4.0))
     while not rospy.is_shutdown():
-        # EXPLORATION MODE
+
+
+        # print("Waiting for goal pose wrt robot_base_footprint")
+        #decide whether to keep try catch...
+        try:
+            (trans,rot) = tf_listener.lookupTransform('goal_frame', 'robot_base_footprint', rospy.Time(0))
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            rospy.logerr("Unable to find goal_pose wrt robot_base_footprint")
+            rospy.signal_shutdown()
+
+        reached_goal = (trans[0]**2 + trans[1]**2) < 0.4
+        goal_pub.publish(reached_goal)
+        if reached_goal:
+            print("Reached goal! Stopping...")
+            rospy.signal_shutdown("Reached goal")
+
         chosen_waypoint = np.zeros(4)
-        if len(context_queue) > model_params["context_size"]:
-            if model_params["model_type"] == "nomad":
-                obs_images = transform_images(context_queue, model_params["image_size"], center_crop=False)
-                obs_images = torch.split(obs_images, 3, dim=1)
-                obs_images = torch.cat(obs_images, dim=1) 
-                obs_images = obs_images.to(device)
-                mask = torch.zeros(1).long().to(device)  
-
-                start = max(closest_node - args.radius, 0)
-                end = min(closest_node + args.radius + 1, goal_node)
-                goal_image = [transform_images(g_img, model_params["image_size"], center_crop=False).to(device) for g_img in topomap[start:end + 1]]
-                goal_image = torch.concat(goal_image, dim=0)
-
-                obsgoal_cond = model('vision_encoder', obs_img=obs_images.repeat(len(goal_image), 1, 1, 1), goal_img=goal_image, input_goal_mask=mask.repeat(len(goal_image)))
-                dists = model("dist_pred_net", obsgoal_cond=obsgoal_cond)
-                dists = to_numpy(dists.flatten())
-                min_idx = np.argmin(dists)
-                closest_node = min_idx + start
-                print("closest node:", closest_node)
-                sg_idx = min(min_idx + int(dists[min_idx] < args.close_threshold), len(obsgoal_cond) - 1)
-                obs_cond = obsgoal_cond[sg_idx].unsqueeze(0)
-
-                # infer action
-                with torch.no_grad():
-                    # encoder vision features
-                    if len(obs_cond.shape) == 2:
-                        obs_cond = obs_cond.repeat(args.num_samples, 1)
-                    else:
-                        obs_cond = obs_cond.repeat(args.num_samples, 1, 1)
-                    
-                    # initialize action from Gaussian noise
-                    noisy_action = torch.randn(
-                        (args.num_samples, model_params["len_traj_pred"], 2), device=device)
-                    naction = noisy_action
-
-                    # init scheduler
-                    noise_scheduler.set_timesteps(num_diffusion_iters)
-
-                    start_time = time.time()
-                    for k in noise_scheduler.timesteps[:]:
-                        # predict noise
-                        noise_pred = model(
-                            'noise_pred_net',
-                            sample=naction,
-                            timestep=k,
-                            global_cond=obs_cond
-                        )
-                        # inverse diffusion step (remove noise)
-                        naction = noise_scheduler.step(
-                            model_output=noise_pred,
-                            timestep=k,
-                            sample=naction
-                        ).prev_sample
-                    print("time elapsed:", time.time() - start_time)
-
-                naction = to_numpy(get_action(naction))
-                sampled_actions_msg = Float32MultiArray()
-                sampled_actions_msg.data = np.concatenate((np.array([0]), naction.flatten()))
-                print("published sampled actions")
-                sampled_actions_pub.publish(sampled_actions_msg)
-                naction = naction[0] 
-                chosen_waypoint = naction[args.waypoint]
-            elif (len(context_queue) > model_params["context_size"]):
-                start = max(closest_node - args.radius, 0)
-                end = min(closest_node + args.radius + 1, goal_node)
+        if (len(context_queue) > model_params["context_size"]):
+                #start = max(closest_node - args.radius, 0)
+                #end = min(closest_node + args.radius + 1, goal_node)
                 distances = []
                 waypoints = []
                 batch_obs_imgs = []
                 batch_goal_data = []
-                for i, sg_img in enumerate(topomap[start: end + 1]):
-                    transf_obs_img = transform_images(context_queue, model_params["image_size"])
-                    goal_data = transform_images(sg_img, model_params["image_size"])
-                    batch_obs_imgs.append(transf_obs_img)
-                    batch_goal_data.append(goal_data)
+
+                #for i, sg_img in enumerate(topomap[start: end + 1]):
+                transf_obs_img = transform_images(context_queue, model_params["image_size"])
+                batch_obs_imgs.append(transf_obs_img)
+                batch_obs_imgs = torch.cat(batch_obs_imgs, dim=0).to(device)
+
+                # CHANGE goal_data = transform_images(sg_img, model_params["image_size"])
+                # CHANGE batch_goal_data.append(goal_data)
                     
                 # predict distances and waypoints
-                batch_obs_imgs = torch.cat(batch_obs_imgs, dim=0).to(device)
-                batch_goal_data = torch.cat(batch_goal_data, dim=0).to(device)
+                # EVAL TO CHANGE batch_goal_data = torch.cat(batch_goal_data, dim=0).to(device)
+                rospy.loginfo("Angle: %s" %str(tf.transformations.euler_from_quaternion(rot)))
+                batch_goal_data = torch.tensor([trans[0], trans[1], tf.transformations.euler_from_quaternion(rot)[2]]).to(device)
+                batch_goal_data = batch_goal_data.unsqueeze(0)
 
                 distances, waypoints = model(batch_obs_imgs, batch_goal_data)
                 distances = to_numpy(distances)
                 waypoints = to_numpy(waypoints)
+
+                #MODIFICARE SOTTO.. 
                 # look for closest node
-                closest_node = np.argmin(distances)
+                #closest_node = np.argmin(distances)
                 # chose subgoal and output waypoints
-                if distances[closest_node] > args.close_threshold:
-                    chosen_waypoint = waypoints[closest_node][args.waypoint]
-                    sg_img = topomap[start + closest_node]
-                else:
-                    chosen_waypoint = waypoints[min(
-                        closest_node + 1, len(waypoints) - 1)][args.waypoint]
-                    sg_img = topomap[start + min(closest_node + 1, len(waypoints) - 1)]     
+                # if distances[closest_node] > args.close_threshold:
+                #     chosen_waypoint = waypoints[closest_node][args.waypoint]
+                #     sg_img = topomap[start + closest_node]
+                # else:
+                #     chosen_waypoint = waypoints[min(
+                #         closest_node + 1, len(waypoints) - 1)][args.waypoint]
+                #     sg_img = topomap[start + min(closest_node + 1, len(waypoints) - 1)]
+
+                chosen_waypoint = waypoints[0][args.waypoint]
+                rospy.loginfo( "Chosen Waypoint: %s"  %str(chosen_waypoint))
+        
         # RECOVERY MODE
         if model_params["normalize"]:
             chosen_waypoint[:2] *= (MAX_V / RATE)  
         waypoint_msg = Float32MultiArray()
         waypoint_msg.data = chosen_waypoint
         waypoint_pub.publish(waypoint_msg)
-        reached_goal = closest_node == goal_node
-        goal_pub.publish(reached_goal)
-        if reached_goal:
-            print("Reached goal! Stopping...")
+
+        #CHECK reached_goal = closest_node == goal_node
+
+        # tf_broadcaster.sendTransform((x, y, 0),
+        #              tf.transformations.quaternion_from_euler(0, 0, theta),
+        #              rospy.Time.now(),
+        #              "goal_frame",
+        #              "robot_odom") #CHANGE TO MAP WHEN OUTDOOR
+        
         rate.sleep()
 
 
@@ -311,29 +307,31 @@ if __name__ == "__main__":
         help=f"""index of the waypoint used for navigation (between 0 and 4 or 
         how many waypoints your model predicts) (default: 2)""",
     )
+    # parser.add_argument(
+    #     "--dir",
+    #     "-d",
+    #     default="topomap",
+    #     type=str,
+    #     help="path to topomap images",
+    # )
+
+    #INTEGRARE
     parser.add_argument(
-        "--dir",
-        "-d",
-        default="topomap",
-        type=str,
-        help="path to topomap images",
-    )
-    parser.add_argument(
-        "--goal-node",
-        "-g",
+        "--goal-pose",
+        "-gp",
         default=-1,
         type=int,
-        help="""goal node index in the topomap (if -1, then the goal node is 
+        help="""goal pose (if -1, then the goal node is 
         the last node in the topomap) (default: -1)""",
     )
-    parser.add_argument(
-        "--close-threshold",
-        "-t",
-        default=3,
-        type=int,
-        help="""temporal distance within the next node in the topomap before 
-        localizing to it (default: 3)""",
-    )
+    # parser.add_argument(
+    #     "--close-threshold",
+    #     "-t",
+    #     default=3,
+    #     type=int,
+    #     help="""temporal distance within the next node in the topomap before 
+    #     localizing to it (default: 3)""",
+    # )
     parser.add_argument(
         "--radius",
         "-r",
