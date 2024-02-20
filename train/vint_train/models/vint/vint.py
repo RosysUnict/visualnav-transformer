@@ -76,7 +76,7 @@ class ViNT(BaseModel):
         # if self.obs_encoder_name.split("-")[0] == "positionnet":
             self.obs_encoder = EfficientNet.from_name(obs_encoder, in_channels=3) # context
             self.num_obs_features = self.obs_encoder._fc.in_features
-            goal_dimension = 3
+            goal_dimension = 2
             self.goal_encoder = MLP(3000+goal_dimension, 1000, 512)
             self.num_goal_features = 512
         else:

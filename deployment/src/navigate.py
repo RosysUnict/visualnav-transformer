@@ -30,7 +30,7 @@ import geometry_msgs.msg
 
 
 from vint_train.visualizing.action_utils import plot_trajs_and_points_on_image, plot_trajs_and_points 
-from vint_train.visualizing.colors import CYAN, MAGENTA, GREEN, RED
+from vint_train.visualizing.visualize_utils import CYAN, MAGENTA, GREEN, RED
 from cv_bridge import CvBridge
 import io
 
@@ -75,10 +75,19 @@ def callback_obs(msg):
             context_queue.pop(0)
             context_queue.append(obs_img)
 
+def cv2_to_imgmsg(cv_image):
+    img_msg = Image()
+    img_msg.height = cv_image.shape[0]
+    img_msg.width = cv_image.shape[1]
+    img_msg.encoding = "bgr8"
+    img_msg.is_bigendian = 0
+    img_msg.data = cv_image.tostring()
+    img_msg.step = len(img_msg.data) // img_msg.height # That double line is actually integer division, not a comment
+    return img_msg
 
 def plot_and_publish_actions_image(pred_waypoints, goal_pos, obs_img, dataset_name, display=False):
     bridge = CvBridge()
-    fig, ax = plt.subplots(1, 3)
+    fig, ax = plt.subplots(1, 2)
     start_pos = np.array([0, 0])
     if len(pred_waypoints.shape) > 2:
         trajs = [*pred_waypoints]
@@ -88,24 +97,25 @@ def plot_and_publish_actions_image(pred_waypoints, goal_pos, obs_img, dataset_na
         ax[0],
         trajs,
         [start_pos, goal_pos],
+        point_labels=['robot', 'goal'],
         traj_colors=[CYAN, MAGENTA],
         point_colors=[GREEN, RED],
     )
-    plot_trajs_and_points_on_image(
-        ax[1],
-        obs_img,
-        dataset_name,
-        trajs,
-        [start_pos, goal_pos],
-        traj_colors=[CYAN, MAGENTA],
-        point_colors=[GREEN, RED],
-    )
+    # plot_trajs_and_points_on_image(
+    #     ax[1],
+    #     obs_img,
+    #     dataset_name,
+    #     trajs,
+    #     [start_pos, goal_pos],
+    #     traj_colors=[CYAN, MAGENTA],
+    #     point_colors=[GREEN, RED],
+    # )
     # ax[2].imshow(goal_img)
 
     fig.set_size_inches(18.5, 10.5)
     ax[0].set_title(f"Action Prediction")
     ax[1].set_title(f"Observation")
-    ax[2].set_title(f"Goal")
+    # ax[2].set_title(f"Goal")
 
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
@@ -116,8 +126,12 @@ def plot_and_publish_actions_image(pred_waypoints, goal_pos, obs_img, dataset_na
     # Reshape the image to the appropriate size
     image = image.reshape((len(image), 1))
 
+
+
     # Convert image to ROS message
-    ros_image = bridge.cv2_to_imgmsg(image, encoding="rgb8")
+    ros_image = bridge.cv2_to_imgmsg(image, encoding="passthrough")
+    # ros_image = cv2_to_imgmsg(image)
+    
 
     # Publish the image
     # image_pub.publish(ros_image)
@@ -253,7 +267,7 @@ def main(args: argparse.Namespace):
                 # EVAL TO CHANGE batch_goal_data = torch.cat(batch_goal_data, dim=0).to(device)
                 rospy.loginfo("Angle: %s" %str(tf.transformations.euler_from_quaternion(rot)))
                 # batch_goal_data = torch.tensor([trans[0], trans[1], tf.transformations.euler_from_quaternion(rot)[2]]).to(device)
-                
+
                 batch_goal_data = torch.tensor([trans[0], trans[1]]).to(device)
                 batch_goal_data = batch_goal_data.unsqueeze(0)
 
@@ -275,7 +289,7 @@ def main(args: argparse.Namespace):
 
                 chosen_waypoint = waypoints[0][args.waypoint]
                 rospy.loginfo( "Chosen Waypoint: %s"  %str(chosen_waypoint))
-                ros_image = plot_and_publish_actions_image(waypoints[0], trans[0:1], transf_obs_img[0], "vint-position", display=False)
+                ros_image = plot_and_publish_actions_image(waypoints[0], trans[0:2], transf_obs_img[0], "recon", display=False)
                 action_image_pub.publish(ros_image)
         
         # RECOVERY MODE
@@ -301,9 +315,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         "-m",
-        default="nomad",
+        default="vint",
         type=str,
-        help="model name (only nomad is supported) (hint: check ../config/models.yaml) (default: nomad)",
+        help="model name (only nomad is supported) (hint: check ../config/models.yaml) (default: vint)",
     )
     parser.add_argument(
         "--waypoint",
