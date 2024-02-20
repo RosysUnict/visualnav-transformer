@@ -32,6 +32,8 @@ import geometry_msgs.msg
 from vint_train.visualizing.action_utils import plot_trajs_and_points_on_image, plot_trajs_and_points 
 from vint_train.visualizing.visualize_utils import CYAN, MAGENTA, GREEN, RED
 from cv_bridge import CvBridge
+import cv2
+
 import io
 
 
@@ -44,7 +46,7 @@ from topic_names import (IMAGE_TOPIC,
 # CONSTANTS
 #TOPOMAP_IMAGES_DIR = "../topomaps/images"
 IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_raw"
-ACTION_IMAGE_TOPIC = "/action_plot_image"
+ACTION_IMAGE_TOPIC = "/trajectory"
 
 
 MODEL_WEIGHTS_PATH = "../model_weights"
@@ -87,14 +89,16 @@ def cv2_to_imgmsg(cv_image):
 
 def plot_and_publish_actions_image(pred_waypoints, goal_pos, obs_img, dataset_name, display=False):
     bridge = CvBridge()
-    fig, ax = plt.subplots(1, 2)
+    fig, ax = plt.subplots(1,1)
+    # fig, ax = plt.subplot(1,1, squeeze=False)
+
     start_pos = np.array([0, 0])
     if len(pred_waypoints.shape) > 2:
         trajs = [*pred_waypoints]
     else:
         trajs = [pred_waypoints]
     plot_trajs_and_points(
-        ax[0],
+        ax,
         trajs,
         [start_pos, goal_pos],
         point_labels=['robot', 'goal'],
@@ -103,7 +107,7 @@ def plot_and_publish_actions_image(pred_waypoints, goal_pos, obs_img, dataset_na
     )
     # plot_trajs_and_points_on_image(
     #     ax[1],
-    #     obs_img,
+    #     obs_img[0],
     #     dataset_name,
     #     trajs,
     #     [start_pos, goal_pos],
@@ -112,9 +116,9 @@ def plot_and_publish_actions_image(pred_waypoints, goal_pos, obs_img, dataset_na
     # )
     # ax[2].imshow(goal_img)
 
-    fig.set_size_inches(18.5, 10.5)
-    ax[0].set_title(f"Action Prediction")
-    ax[1].set_title(f"Observation")
+    # fig.set_size_inches(18.5, 10.5)
+    ax.set_title(f"Action Prediction")
+    # ax[1].set_title(f"Observation")
     # ax[2].set_title(f"Goal")
 
     buf = io.BytesIO()
@@ -125,9 +129,7 @@ def plot_and_publish_actions_image(pred_waypoints, goal_pos, obs_img, dataset_na
 
     # Reshape the image to the appropriate size
     image = image.reshape((len(image), 1))
-
-
-
+    image = cv2.imdecode(image, 1)
     # Convert image to ROS message
     ros_image = bridge.cv2_to_imgmsg(image, encoding="passthrough")
     # ros_image = cv2_to_imgmsg(image)
@@ -195,8 +197,8 @@ def main(args: argparse.Namespace):
         IMAGE_TOPIC, Image, callback_obs, queue_size=1)
     waypoint_pub = rospy.Publisher(
         WAYPOINT_TOPIC, Float32MultiArray, queue_size=1)  
-    action_image_pub = rospy.Publisher(
-        ACTION_IMAGE_TOPIC, Image, queue_size=1)
+    action_traj_pub = rospy.Publisher(
+        ACTION_IMAGE_TOPIC, Float32MultiArray, queue_size=1)
     sampled_actions_pub = rospy.Publisher(SAMPLED_ACTIONS_TOPIC, Float32MultiArray, queue_size=1)
     goal_pub = rospy.Publisher("/reached_goal", Bool, queue_size=1)
     tf_listener = tf.TransformListener()
@@ -235,10 +237,11 @@ def main(args: argparse.Namespace):
         # print("Waiting for goal pose wrt robot_base_footprint")
         #decide whether to keep try catch...
         try:
-            (trans,rot) = tf_listener.lookupTransform('goal_frame', 'robot_base_footprint', rospy.Time(0))
+            (trans,rot) = tf_listener.lookupTransform('robot_base_footprint', 'goal_frame', rospy.Time(0))
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             rospy.logerr("Unable to find goal_pose wrt robot_base_footprint")
             rospy.signal_shutdown()
+
 
         reached_goal = (trans[0]**2 + trans[1]**2) < 0.4
         goal_pub.publish(reached_goal)
@@ -265,13 +268,16 @@ def main(args: argparse.Namespace):
                     
                 # predict distances and waypoints
                 # EVAL TO CHANGE batch_goal_data = torch.cat(batch_goal_data, dim=0).to(device)
-                rospy.loginfo("Angle: %s" %str(tf.transformations.euler_from_quaternion(rot)))
-                # batch_goal_data = torch.tensor([trans[0], trans[1], tf.transformations.euler_from_quaternion(rot)[2]]).to(device)
+                # rospy.loginfo("Angle: %s" %str(tf.transformations.euler_from_quaternion(rot)))
+                # rospy.loginfo("Translation: %s" %str(trans))
+                # batch_goal_data = torch.tensor([trans[0], trans[1], -tf.transformations.euler_from_quaternion(rot)[2]]).to(device)
 
                 batch_goal_data = torch.tensor([trans[0], trans[1]]).to(device)
                 batch_goal_data = batch_goal_data.unsqueeze(0)
 
+                # start_time = time.time()
                 distances, waypoints = model(batch_obs_imgs, batch_goal_data)
+                # print("Time to predict: ", time.time() - start_time)
                 distances = to_numpy(distances)
                 waypoints = to_numpy(waypoints)
 
@@ -288,9 +294,11 @@ def main(args: argparse.Namespace):
                 #     sg_img = topomap[start + min(closest_node + 1, len(waypoints) - 1)]
 
                 chosen_waypoint = waypoints[0][args.waypoint]
-                rospy.loginfo( "Chosen Waypoint: %s"  %str(chosen_waypoint))
-                ros_image = plot_and_publish_actions_image(waypoints[0], trans[0:2], transf_obs_img[0], "recon", display=False)
-                action_image_pub.publish(ros_image)
+                # rospy.loginfo( "Chosen Waypoint: %s"  %str(chosen_waypoint))
+                # ros_image = plot_and_publish_actions_image(waypoints[0], trans[0:2], transf_obs_img[0], "recon", display=False)
+                action_traj = Float32MultiArray()
+                action_traj.data = waypoints[0].flatten().tolist()
+                action_traj_pub.publish(action_traj)
         
         # RECOVERY MODE
         if model_params["normalize"]:
