@@ -20,6 +20,7 @@ class MLP(nn.Module):
         self.fc1 = nn.Linear(input_size, 1024)
         self.fc2 = nn.Linear(1024, 1024)
         self.fc3 = nn.Linear(1024, 512)
+        self._silu = nn.SiLU()
 
 
     def forward(self, x):
@@ -31,6 +32,7 @@ class MLP(nn.Module):
         x = self.fc2(x)
         x = self.relu(x)
         x = self.fc3(x)
+        x = self._silu(x)
 
         return x
 
