@@ -41,6 +41,7 @@ def _compute_losses(
     alpha: float,
     learn_angle: bool,
     action_mask: torch.Tensor = None,
+    action_activation : torch.Tensor = None,
 ):
     """
     Compute losses for distance and action prediction.
@@ -57,7 +58,7 @@ def _compute_losses(
 
     # Mask out invalid inputs (for negatives, or when the distance between obs and goal is large)
     assert action_pred.shape == action_label.shape, f"{action_pred.shape} != {action_label.shape}"
-    action_loss = action_reduce(F.mse_loss(action_pred, action_label, reduction="none"))
+    action_loss = action_reduce(F.mse_loss(action_pred, action_label, reduction="none") + action_activation)
 
     action_waypts_cos_similairity = action_reduce(F.cosine_similarity(
         action_pred[:, :, :2], action_label[:, :, :2], dim=-1
@@ -256,8 +257,9 @@ def train(
 
         # viz_goal_image = TF.resize(goal_image, VISUALIZATION_IMAGE_SIZE)
         
-        goal_yaw = goal_yaw.view(-1, 1)
-        goal_image = torch.cat((goal_pos, goal_yaw), dim=1).to(device)
+        # goal_yaw = goal_yaw.view(-1, 1)
+        # goal_image = torch.cat((goal_pos, goal_yaw), dim=1).to(device)
+        goal_image = goal_pos.to(device)
         # print(goal_image.shape)
 
         # print(goal_pos[1])
@@ -270,6 +272,7 @@ def train(
         optimizer.zero_grad()
       
         dist_pred, action_pred = model_outputs
+        action_activation = model.goal_encoding_norm
 
         losses = _compute_losses(
             dist_label=dist_label,
@@ -279,6 +282,7 @@ def train(
             alpha=alpha,
             learn_angle=learn_angle,
             action_mask=action_mask,
+            action_activation=action_activation,
         )
 
         losses["total_loss"].backward()
@@ -403,8 +407,9 @@ def evaluate(
 
             # goal_image = transform(goal_image).to(device)
             # goal_image = torch.tensor([goal_pos[0], goal_pos[1], goal_yaw]).to(device)
-            goal_yaw = goal_yaw.view(-1, 1)
-            goal_image = torch.cat((goal_pos, goal_yaw), dim=1).to(device)
+            # goal_yaw = goal_yaw.view(-1, 1)
+            # goal_image = torch.cat((goal_pos, goal_yaw), dim=1).to(device)
+            goal_image = goal_pos.to(device)
 
             model_outputs = model(obs_image, goal_image)
 

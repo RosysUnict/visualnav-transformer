@@ -162,13 +162,14 @@ class ViNT(BaseModel):
         obs_encoding = torch.transpose(obs_encoding, 0, 1)
         # currently, the size is [batch_size, self.context_size+1, self.obs_encoding_size]
 
-        for i in range(self.context_size):
-            print("obs_encoding"+ str(i) + " Norm:" + str(torch.linalg.norm(obs_encoding[0, i, :])))
+        # for i in range(self.context_size):
+        #     print("obs_encoding"+ str(i) + " Norm:" + str(torch.linalg.norm(obs_encoding[0, i, :])))
             # print(obs_encoding.shape)
         goal_encoding.unsqueeze_(1)
-        print("goal_encoding Norm: " + str(torch.linalg.norm(goal_encoding[0, 0, :])))
+        # print("goal_encoding Norm: " + str(torch.linalg.norm(goal_encoding[0, 0, :])))
         # print(goal_encoding.shape)
         # concatenate the goal encoding to the observation encoding
+        self.goal_encoding_norm = torch.linalg.norm(goal_encoding[0, 0, :])
         tokens = torch.cat((obs_encoding, goal_encoding), dim=1)
         final_repr = self.decoder(tokens)
         # currently, the size is [batch_size, 32]
