@@ -238,7 +238,7 @@ def main(args: argparse.Namespace):
                     sg_img = topomap[start + min(closest_node + 1, len(waypoints) - 1)]
 
                 action_traj = Float32MultiArray()
-                action_traj.data = waypoints[0].flatten().tolist()
+                action_traj.data = waypoints[closest_node].flatten().tolist()
                 action_traj_pub.publish(action_traj)
 
         # RECOVERY MODE
