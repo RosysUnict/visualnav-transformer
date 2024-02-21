@@ -24,12 +24,14 @@ import yaml
 import time
 
 # UTILS
-from topic_names import (IMAGE_TOPIC,
-                        WAYPOINT_TOPIC,
+from topic_names import (WAYPOINT_TOPIC,
                         SAMPLED_ACTIONS_TOPIC)
 
 
 # CONSTANTS
+ACTION_IMAGE_TOPIC = "/trajectory"
+IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_raw"
+# IMAGE_TOPIC = "/image"
 TOPOMAP_IMAGES_DIR = "../topomaps/images"
 MODEL_WEIGHTS_PATH = "../model_weights"
 ROBOT_CONFIG_PATH ="../config/robot.yaml"
@@ -55,6 +57,7 @@ def callback_obs(msg):
     if context_size is not None:
         if len(context_queue) < context_size + 1:
             context_queue.append(obs_img)
+            print("Buffering context queue...")    
         else:
             context_queue.pop(0)
             context_queue.append(obs_img)
@@ -99,6 +102,7 @@ def main(args: argparse.Namespace):
         topomap.append(PILImage.open(image_path))
 
     closest_node = 0
+    closest_node_idx = 0
     assert -1 <= args.goal_node < len(topomap), "Invalid goal index"
     if args.goal_node == -1:
         goal_node = len(topomap) - 1
@@ -113,6 +117,8 @@ def main(args: argparse.Namespace):
         IMAGE_TOPIC, Image, callback_obs, queue_size=1)
     waypoint_pub = rospy.Publisher(
         WAYPOINT_TOPIC, Float32MultiArray, queue_size=1)  
+    action_traj_pub = rospy.Publisher(
+        ACTION_IMAGE_TOPIC, Float32MultiArray, queue_size=1)
     sampled_actions_pub = rospy.Publisher(SAMPLED_ACTIONS_TOPIC, Float32MultiArray, queue_size=1)
     goal_pub = rospy.Publisher("/topoplan/reached_goal", Bool, queue_size=1)
 
@@ -130,7 +136,7 @@ def main(args: argparse.Namespace):
     while not rospy.is_shutdown():
         # EXPLORATION MODE
         chosen_waypoint = np.zeros(4)
-        if len(context_queue) > model_params["context_size"]:
+        if len(context_queue) > model_params["context_size"]: #this means the buffer is ready
             if model_params["model_type"] == "nomad":
                 obs_images = transform_images(context_queue, model_params["image_size"], center_crop=False)
                 obs_images = torch.split(obs_images, 3, dim=1)
@@ -192,9 +198,12 @@ def main(args: argparse.Namespace):
                 sampled_actions_pub.publish(sampled_actions_msg)
                 naction = naction[0] 
                 chosen_waypoint = naction[args.waypoint]
-            elif (len(context_queue) > model_params["context_size"]):
-                start = max(closest_node - args.radius, 0)
-                end = min(closest_node + args.radius + 1, goal_node)
+            elif (len(context_queue) > model_params["context_size"]): #this check seems to be redundant
+                start = max(closest_node_idx - args.radius, 0)
+                end = min(closest_node_idx + args.radius + 1, goal_node)
+                rospy.loginfo(start)
+                rospy.loginfo(end)
+
                 distances = []
                 waypoints = []
                 batch_obs_imgs = []
@@ -211,9 +220,14 @@ def main(args: argparse.Namespace):
 
                 distances, waypoints = model(batch_obs_imgs, batch_goal_data)
                 distances = to_numpy(distances)
+                rospy.loginfo(distances)
                 waypoints = to_numpy(waypoints)
                 # look for closest node
                 closest_node = np.argmin(distances)
+                closest_node_idx = max(closest_node_idx + closest_node - args.radius,0)
+                # rospy.loginfo("closest_node = " + str(closest_node))
+                # rospy.loginfo("closest_node_idx = " + str(closest_node_idx))
+
                 # chose subgoal and output waypoints
                 if distances[closest_node] > args.close_threshold:
                     chosen_waypoint = waypoints[closest_node][args.waypoint]
@@ -221,14 +235,19 @@ def main(args: argparse.Namespace):
                 else:
                     chosen_waypoint = waypoints[min(
                         closest_node + 1, len(waypoints) - 1)][args.waypoint]
-                    sg_img = topomap[start + min(closest_node + 1, len(waypoints) - 1)]     
+                    sg_img = topomap[start + min(closest_node + 1, len(waypoints) - 1)]
+
+                action_traj = Float32MultiArray()
+                action_traj.data = waypoints[0].flatten().tolist()
+                action_traj_pub.publish(action_traj)
+
         # RECOVERY MODE
         if model_params["normalize"]:
             chosen_waypoint[:2] *= (MAX_V / RATE)  
         waypoint_msg = Float32MultiArray()
         waypoint_msg.data = chosen_waypoint
         waypoint_pub.publish(waypoint_msg)
-        reached_goal = closest_node == goal_node
+        reached_goal = closest_node_idx == goal_node
         goal_pub.publish(reached_goal)
         if reached_goal:
             print("Reached goal! Stopping...")
