@@ -257,7 +257,8 @@ def train(
         # viz_goal_image = TF.resize(goal_image, VISUALIZATION_IMAGE_SIZE)
         
         goal_yaw = goal_yaw.view(-1, 1)
-        goal_image = torch.cat((goal_pos, goal_yaw), dim=1).to(device)
+        # goal_image = torch.cat((goal_pos, goal_yaw), dim=1).to(device)
+        goal_image = goal_pos.to(device)
         # print(goal_image.shape)
 
         # print(goal_pos[1])
@@ -404,7 +405,8 @@ def evaluate(
             # goal_image = transform(goal_image).to(device)
             # goal_image = torch.tensor([goal_pos[0], goal_pos[1], goal_yaw]).to(device)
             goal_yaw = goal_yaw.view(-1, 1)
-            goal_image = torch.cat((goal_pos, goal_yaw), dim=1).to(device)
+            goal_image = goal_pos.to(device)
+            # goal_image = torch.cat((goal_pos, goal_yaw), dim=1).to(device)
 
             model_outputs = model(obs_image, goal_image)
 
