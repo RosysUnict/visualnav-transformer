@@ -32,7 +32,6 @@ class VisualizeActions:
     def __init__(self):
         rospy.init_node('listener', anonymous=True)
 
-        self.tf_listener = tf.TransformListener()
         self._data_subscriber = rospy.Subscriber("/trajectory", Float32MultiArray, self.callback)
         self.action_image_pub = rospy.Publisher(
                 "/action_plot", Image, queue_size=1)
@@ -40,7 +39,7 @@ class VisualizeActions:
         rospy.spin()
 
 
-    def plot_and_publish_actions_image(self, pred_waypoints, goal_pos, display=False):
+    def plot_and_publish_actions_image(self, pred_waypoints, display=False):  #goal_pos,
         pred_waypoints = np.array(pred_waypoints).reshape(-1, 4)
         # print(pred_waypoints)
         bridge = CvBridge()
@@ -48,6 +47,7 @@ class VisualizeActions:
         # fig, ax = plt.subplot(1,1, squeeze=False)
 
         start_pos = np.array([0, 0])
+        #goal_pos = start_pos
         if len(pred_waypoints.shape) > 2:
             trajs = [*pred_waypoints]
         else:
@@ -55,10 +55,10 @@ class VisualizeActions:
         plot_trajs_and_points(
             ax,
             trajs,
-            [start_pos, goal_pos],
-            point_labels=['robot', 'goal'],
+            [start_pos], #, goal_pos
+            point_labels=['robot'], #, 'goal'
             traj_colors=[CYAN, MAGENTA],
-            point_colors=[GREEN, RED],
+            point_colors=[GREEN], #, RED
         )
         ax.set_title(f"Action Prediction")
         
@@ -85,14 +85,12 @@ class VisualizeActions:
         return ros_image
 
     def callback(self, data):
-        try:
-            (trans,rot) = self.tf_listener.lookupTransform('robot_base_footprint', 'goal_frame', rospy.Time(0))
-        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            rospy.logerr("Unable to find goal_pose wrt robot_base_footprint")
-            rospy.signal_shutdown()
         
-        ros_im = self.plot_and_publish_actions_image(data.data, trans[0:2])
+        ros_im = self.plot_and_publish_actions_image(data.data)#, trans[0:2])
         self.action_image_pub.publish(ros_im)
+
+        print("Sending image...")
+
 
 
 

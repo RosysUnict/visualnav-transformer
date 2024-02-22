@@ -30,8 +30,9 @@ from topic_names import (WAYPOINT_TOPIC,
 
 # CONSTANTS
 ACTION_IMAGE_TOPIC = "/trajectory"
-IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_raw"
-# IMAGE_TOPIC = "/image"
+# IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_raw"
+IMAGE_TOPIC = "/image"
+#IMAGE_TOPIC = "/image_throttle"
 TOPOMAP_IMAGES_DIR = "../topomaps/images"
 MODEL_WEIGHTS_PATH = "../model_weights"
 ROBOT_CONFIG_PATH ="../config/robot.yaml"
@@ -201,8 +202,8 @@ def main(args: argparse.Namespace):
             elif (len(context_queue) > model_params["context_size"]): #this check seems to be redundant
                 start = max(closest_node_idx - args.radius, 0)
                 end = min(closest_node_idx + args.radius + 1, goal_node)
-                rospy.loginfo(start)
-                rospy.loginfo(end)
+                #rospy.loginfo(start)
+                #rospy.loginfo(end)
 
                 distances = []
                 waypoints = []
@@ -220,13 +221,13 @@ def main(args: argparse.Namespace):
 
                 distances, waypoints = model(batch_obs_imgs, batch_goal_data)
                 distances = to_numpy(distances)
-                rospy.loginfo(distances)
+                #rospy.loginfo(distances)
                 waypoints = to_numpy(waypoints)
                 # look for closest node
                 closest_node = np.argmin(distances)
                 closest_node_idx = max(closest_node_idx + closest_node - args.radius,0)
-                # rospy.loginfo("closest_node = " + str(closest_node))
-                # rospy.loginfo("closest_node_idx = " + str(closest_node_idx))
+                rospy.loginfo("closest_node = " + str(closest_node))
+                rospy.loginfo("closest_node_idx = " + str(closest_node_idx))
 
                 # chose subgoal and output waypoints
                 if distances[closest_node] > args.close_threshold:
