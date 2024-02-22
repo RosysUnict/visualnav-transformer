@@ -46,6 +46,7 @@ from topic_names import (IMAGE_TOPIC,
 # CONSTANTS
 #TOPOMAP_IMAGES_DIR = "../topomaps/images"
 IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_raw"
+#IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_throttle"
 ACTION_IMAGE_TOPIC = "/trajectory"
 
 
