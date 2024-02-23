@@ -31,8 +31,8 @@ from topic_names import (WAYPOINT_TOPIC,
 # CONSTANTS
 ACTION_IMAGE_TOPIC = "/trajectory"
 # IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_raw"
-IMAGE_TOPIC = "/image"
-#IMAGE_TOPIC = "/image_throttle"
+# IMAGE_TOPIC = "/image"
+IMAGE_TOPIC = "/image_throttle"
 TOPOMAP_IMAGES_DIR = "../topomaps/images"
 MODEL_WEIGHTS_PATH = "../model_weights"
 ROBOT_CONFIG_PATH ="../config/robot.yaml"
