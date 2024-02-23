@@ -45,8 +45,8 @@ from topic_names import (IMAGE_TOPIC,
 
 # CONSTANTS
 #TOPOMAP_IMAGES_DIR = "../topomaps/images"
-IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_raw"
-#IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_throttle"
+#IMAGE_TOPIC = "/robot/front_rgbd_camera/rgb/image_raw"
+IMAGE_TOPIC = "/image_throttle"
 ACTION_IMAGE_TOPIC = "/trajectory"
 
 
@@ -74,6 +74,7 @@ def callback_obs(msg):
     if context_size is not None:
         if len(context_queue) < context_size + 1:
             context_queue.append(obs_img)
+            rospy.loginfo("Buffering context queue: %s" %len(context_queue))
         else:
             context_queue.pop(0)
             context_queue.append(obs_img)
