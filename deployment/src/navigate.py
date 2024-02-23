@@ -78,7 +78,7 @@ def main(args: argparse.Namespace):
     context_size = model_params["context_size"]
 
     # load model weights
-    ckpth_path = model_paths[args.model]["ckpt_path"]
+    ckpth_path = os.path.join(MODEL_WEIGHTS_PATH, args.ckpt_file)
     if os.path.exists(ckpth_path):
         print(f"Loading model from {ckpth_path}")
     else:
@@ -264,6 +264,13 @@ if __name__ == "__main__":
         default="nomad",
         type=str,
         help="model name (only nomad is supported) (hint: check ../config/models.yaml) (default: nomad)",
+    )
+    parser.add_argument(
+        "--ckpt-file",
+        "-c",
+        default="vint.pth", # close waypoints exihibit straight line motion (the middle waypoint is a good default)
+        type=str,
+        help=f"""file name of weights (default: vint.pth)""",
     )
     parser.add_argument(
         "--waypoint",
