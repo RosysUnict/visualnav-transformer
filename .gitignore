@@ -5,6 +5,8 @@ train/wandb/*
 train/gnm_dataset/*
 *_test.yaml
 
+diffusion_policy/
+
 *.png
 *.jpg
 *.pth
