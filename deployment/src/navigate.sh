@@ -7,6 +7,7 @@ tmux new-session -d -s $session_name
 # Split the window into four panes
 tmux selectp -t 0    # select the first (0) pane
 tmux splitw -h -p 50 # split it into two halves
+
 tmux selectp -t 0    # select the first (0) pane
 tmux splitw -v -p 50 # split it into two halves
 
@@ -14,6 +15,9 @@ tmux selectp -t 2    # select the new, second (2) pane
 tmux splitw -v -p 50 # split it into two halves
 
 tmux selectp -t 1    # select the  pane
+tmux splitw -v -p 50 # split it into two halves
+
+tmux selectp -t 4    # select the  pane
 tmux splitw -v -p 50 # split it into two halves
 
 
@@ -41,6 +45,11 @@ tmux select-pane -t 4
 tmux send-keys "conda activate vint_deployment_11" Enter
 tmux send-keys "cd ~/vint_ws/src/visualnav-transformer/deployment/src" Enter
 tmux send-keys "python visualize_path.py" Enter
+
+tmux select-pane -t 5
+tmux send-keys "ssh rosys@192.168.0.100" Enter
+tmux send-keys "cd /home/rosys/fm_nav_rosbags/vint" Enter
+tmux send-keys "rosbag record /vint_path /robot/vint/cmd_vel /waypoint /usb_cam/image_raw/compressed /tf -o vint " 
 
 
 # Attach to the tmux session
