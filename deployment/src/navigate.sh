@@ -49,7 +49,7 @@ tmux send-keys "python visualize_path.py" Enter
 tmux select-pane -t 5
 tmux send-keys "ssh rosys@192.168.0.100" Enter
 tmux send-keys "cd /home/rosys/fm_nav_rosbags/vint" Enter
-tmux send-keys "rosbag record /vint_path /robot/ai_nav/cmd_vel /waypoint /usb_cam/image_raw/compressed /tf /robot/joy/buttons -o vint " 
+tmux send-keys "rosbag record /vint_path /robot/ai_nav/cmd_vel /waypoint /usb_cam/image_raw/compressed /tf /robot/joy -o vint " 
 
 
 # Attach to the tmux session
